@@ -1,5 +1,9 @@
 import json
 import sqlite3
+import time
+import hashlib
+import http.client
+import urllib.parse
 from sqlite3 import Error
 import telebot
 import requests
@@ -276,7 +280,7 @@ def process_domain_purchase(message, domain_zone):
     domain_name = message.text
 
     # Проверка доступности доменной зоны и предложение купить домен
-    if is_domain_available(domain_zone, domain_name):
+    if is_domain_available(domain_name, domain_zone):
         confirmation_keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
         buy_button = telebot.types.KeyboardButton('Купить')
         cancel_button = telebot.types.KeyboardButton('Отмена')
@@ -287,9 +291,70 @@ def process_domain_purchase(message, domain_zone):
         bot.send_message(user_id, "Это доменное имя недоступно. Пожалуйста, выберите другое доменное имя.")
 
 
+def is_domain_available(query, suffix):
+    url = "http://panda.www.net.cn/cgi-bin/check_muitl.cgi?domain="
+    url += query + suffix
+
+    result = my_file_get_contents(url)  # You need to implement my_file_get_contents() method
+
+    if query + suffix + "|210" in result:
+        return True
+    elif query + suffix + "|211" in result:
+        return False
+    else:
+        return False
+
+
+def my_file_get_contents(url):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.text
+    except requests.exceptions.RequestException:
+        return None
+
+    return None
+
+
+
+def post_data(params, userid, email, password):
+    sVTime = time.strftime("%Y%m%d%H%M", time.localtime())
+    params.append(("userid", userid))
+    params.append(("vtime", sVTime))
+
+    userstr = userid + password + email + sVTime
+    params.append(("userstr", hashlib.md5(userstr.encode()).hexdigest()))
+
+    encoded_params = urllib.parse.urlencode(params)
+    headers = {
+        "Content-type": "application/x-www-form-urlencoded",
+        "Connection": "close"
+    }
+
+    conn = http.client.HTTPConnection("api.nicenic.cxm")
+    conn.request("POST", "/", encoded_params, headers)
+    response = conn.getresponse()
+    data = response.read()
+    conn.close()
+
+    return data.decode()
+
+
+"""
 def is_domain_available(domain_zone, domain_name):
-    # API www.nicenic.net для проверки доступности доменной зоны и доменного имени
-    return True
+    url = "http://api.nicenic.com/"
+    data = {
+        "category": "domain",
+        "action": "check",
+        "query": domain_name,
+        "suffix": domain_zone
+    }
+    try:
+        response = requests.get(url, data=data)
+        print(response.text)
+        response.raise_for_status()  # проверка на ошибки при отправке запроса
+    except requests.exceptions.RequestException as err:
+        print(f"Возникла ошибка при выполнении запроса: {err}")"""
 
 
 def process_domain_purchase_confirmation(message, domain_name):
