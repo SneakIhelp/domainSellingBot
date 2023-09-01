@@ -4,6 +4,7 @@ import time
 import hashlib
 import http.client
 import urllib.parse
+from datetime import datetime, timedelta
 from sqlite3 import Error
 import telebot
 import requests
@@ -286,7 +287,7 @@ def process_domain_purchase(message, domain_zone):
         cancel_button = telebot.types.KeyboardButton('Отмена')
         confirmation_keyboard.add(buy_button, cancel_button)
         bot.send_message(user_id, "Домен доступен. Вы хотите его купить?", reply_markup=confirmation_keyboard)
-        bot.register_next_step_handler(message, process_domain_purchase_confirmation, domain_name)
+        bot.register_next_step_handler(message, process_domain_purchase_confirmation, domain_name, domain_zone)
     else:
         bot.send_message(user_id, "Это доменное имя недоступно. Пожалуйста, выберите другое доменное имя.")
 
@@ -314,7 +315,6 @@ def my_file_get_contents(url):
         return None
 
     return None
-
 
 
 def post_data(params, userid, email, password):
@@ -357,21 +357,45 @@ def is_domain_available(domain_zone, domain_name):
         print(f"Возникла ошибка при выполнении запроса: {err}")"""
 
 
-def process_domain_purchase_confirmation(message, domain_name):
+def process_domain_purchase_confirmation(message, domain_name, domain_zone):
     user_id = message.chat.id
     confirmation = message.text
 
     if confirmation == 'Купить':
-        # Покупка домена
-        purchase_domain(domain_name)
+
+        purchase_domain(domain_name, domain_zone)
         bot.send_message(user_id, "Домен успешно приобретен!")
     else:
         bot.send_message(user_id, "Покупка домена отменена.")
 
 
-def purchase_domain(domain_name):
-    # API www.nicenic.net для покупки домена и привязки NS
-    pass
+def purchase_domain(domain_name, domain_zone):
+    userid = "testapi"
+    password = "123456"
+    email = "test@nicenic.com"
+
+    current_time = datetime.utcnow()
+    vtime = current_time + timedelta(hours=8)
+    vtime_str = vtime.strftime('%Y%m%d%H%M') + 'GMT+08:00'
+    userstr = hashlib.md5((userid + password + email + vtime_str).encode()).hexdigest()
+
+    url = "http://apitest.nicenic.com/"
+    data = {
+        "userid": userid,
+        "userstr": userstr,
+        "category": "all",
+        "action": "activate",
+        "vtime": vtime,
+        "domain": domain_name + domain_zone,
+        "domainpwd": "123123",
+        "vyear": 2023
+    }
+    try:
+        response = requests.get(url, data=data)
+        print(response.text)
+        response.raise_for_status()  # проверка на ошибки при отправке запроса
+    except requests.exceptions.RequestException as err:
+        print(f"Возникла ошибка при выполнении запроса: {err}")
 
 
 bot.polling()
