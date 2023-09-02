@@ -7,6 +7,7 @@ import urllib.parse
 from datetime import datetime, timedelta
 from sqlite3 import Error
 import telebot
+from telebot import types
 import requests
 
 bot = telebot.TeleBot("6373577877:AAEntNmZ3XNJkcrOotju9g0K6K2GRg4oDLE")
@@ -396,6 +397,92 @@ def purchase_domain(domain_name, domain_zone):
         response.raise_for_status()  # проверка на ошибки при отправке запроса
     except requests.exceptions.RequestException as err:
         print(f"Возникла ошибка при выполнении запроса: {err}")
+
+
+@bot.message_handler(func=lambda message: message.text == 'Купить хост')
+def buy_host(message):
+    user_id = message.chat.id
+    keyboard = telebot.types.ReplyKeyboardMarkup()
+
+    pq_hosting_button = telebot.types.KeyboardButton('pq hosting')
+    ddos_guard_button = telebot.types.KeyboardButton('DDOS Guard')
+    privacy_protection_button = telebot.types.KeyboardButton('Приват защита от любых атак')
+
+    keyboard.add(pq_hosting_button, ddos_guard_button, privacy_protection_button)
+    bot.send_message(user_id, "Выберите хост:", reply_markup=keyboard)
+
+
+@bot.message_handler(func=lambda message: message.text == 'pq hosting')
+def host_configuration(message):
+    # 1 пункт если нажимает - дает на выбор 4 разных конфигурации хоста, позже покажем
+    pass
+
+
+@bot.message_handler(func=lambda message: message.text == 'DDOS Guard')
+def host_configuration(message):
+    user_id = message.chat.id
+    keyboard = telebot.types.ReplyKeyboardMarkup()
+
+    generic_button = telebot.types.KeyboardButton('Общий сервер ddos guard - 12$')
+    for_one_domain_button = telebot.types.KeyboardButton('Сервер ddos guard для одного домена - 80$')
+    personal_button = telebot.types.KeyboardButton('Личный сервер для 50-ти доменов - 350$')
+
+    keyboard.add(generic_button, for_one_domain_button, personal_button)
+    bot.send_message(user_id, "Выберите сервер:", reply_markup=keyboard)
+
+
+@bot.message_handler(func=lambda message: message.text == 'Приват защита от любых атак')
+def host_configuration(message):
+    user_id = message.chat.id
+    keyboard = telebot.types.ReplyKeyboardMarkup()
+
+    buy_button = telebot.types.KeyboardButton('Купить')
+    cancel_button = telebot.types.KeyboardButton('Отменить')
+
+    keyboard.add(buy_button, cancel_button)
+    bot.send_message(user_id, "1 домен - 95$", reply_markup=keyboard)
+
+    bot.register_next_step_handler(message, process_purchase_confirmation)
+
+
+def process_purchase_confirmation(message):
+    user_id = message.chat.id
+    confirmation = message.text
+
+    if confirmation == 'Купить':
+        purchase_func()
+        bot.send_message(user_id, "Покупка cовершена успешно!")
+    else:
+        bot.send_message(user_id, "Покупка отменена.")
+
+
+def purchase_func():
+    pass
+
+
+@bot.message_handler(func=lambda message: message.text == 'Мои услуги ')
+def my_services(message):
+    markup = types.ReplyKeyboardMarkup(row_width=2)
+    item1 = types.KeyboardButton('Мои сайты')
+    item2 = types.KeyboardButton('Мои хостинги')
+    markup.add(item1, item2)
+    bot.send_message(message.chat.id, 'Выберите действие:', reply_markup=markup)
+
+
+@bot.message_handler(func=lambda message: message.text == 'Мои сайты' or message.text == 'Мои хостинги')
+def handle_buttons(message):
+    # По нажатию первой - выходит список доменов и хостов - на каждый можно нажать и редактировать
+    # Домены - сменить IP привязки
+    # Хостинги - (пишет IP хоста) - показывает текущие домены на хосте + кнопка добавить домен
+    if message.text == 'Мои сайты':
+        pass
+    elif message.text == 'Мои хостинги':
+        pass
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'add_domain')
+def handle_add_domain(call):
+   pass
 
 
 bot.polling()
