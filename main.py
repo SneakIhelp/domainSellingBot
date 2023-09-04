@@ -282,7 +282,7 @@ def process_domain_purchase(message, domain_zone):
     domain_name = message.text
 
     # Проверка доступности доменной зоны и предложение купить домен
-    if is_domain_available(domain_name, domain_zone):
+    if is_domain_available(domain_zone, domain_name):
         confirmation_keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
         buy_button = telebot.types.KeyboardButton('Купить')
         cancel_button = telebot.types.KeyboardButton('Отмена')
@@ -293,69 +293,30 @@ def process_domain_purchase(message, domain_zone):
         bot.send_message(user_id, "Это доменное имя недоступно. Пожалуйста, выберите другое доменное имя.")
 
 
-def is_domain_available(query, suffix):
-    url = "http://panda.www.net.cn/cgi-bin/check_muitl.cgi?domain="
-    url += query + suffix
-
-    result = my_file_get_contents(url)  # You need to implement my_file_get_contents() method
-
-    if query + suffix + "|210" in result:
-        return True
-    elif query + suffix + "|211" in result:
-        return False
-    else:
-        return False
-
-
-def my_file_get_contents(url):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.text
-    except requests.exceptions.RequestException:
-        return None
-
-    return None
-
-
-def post_data(params, userid, email, password):
-    sVTime = time.strftime("%Y%m%d%H%M", time.localtime())
-    params.append(("userid", userid))
-    params.append(("vtime", sVTime))
-
-    userstr = userid + password + email + sVTime
-    params.append(("userstr", hashlib.md5(userstr.encode()).hexdigest()))
-
-    encoded_params = urllib.parse.urlencode(params)
-    headers = {
-        "Content-type": "application/x-www-form-urlencoded",
-        "Connection": "close"
-    }
-
-    conn = http.client.HTTPConnection("api.nicenic.cxm")
-    conn.request("POST", "/", encoded_params, headers)
-    response = conn.getresponse()
-    data = response.read()
-    conn.close()
-
-    return data.decode()
-
-
-"""
 def is_domain_available(domain_zone, domain_name):
-    url = "http://api.nicenic.com/"
-    data = {
-        "category": "domain",
-        "action": "check",
-        "query": domain_name,
-        "suffix": domain_zone
+    url = "https://api.ote-godaddy.com/v1/domains/available"
+    headers = {
+        "Authorization": "sso-key 3mM44UdBCbEmRF_Uac91bSRzG2f196iUCUVac:HN7VLrUFQ9YP1zvAFPjN7R"
     }
+    params = {
+        "domain": domain_name + domain_zone
+    }
+
     try:
-        response = requests.get(url, data=data)
-        print(response.text)
-        response.raise_for_status()  # проверка на ошибки при отправке запроса
+        response = requests.get(url, headers=headers)
+        response_data = response.json()
+
+        if "available" in response_data and response_data["available"]:
+            price = response_data.get("price", {}).get("purchase")
+            if price:
+                return True, price
+            else:
+                return True, "Цена не указана"
+        else:
+            return False, "Домен недоступен"
     except requests.exceptions.RequestException as err:
-        print(f"Возникла ошибка при выполнении запроса: {err}")"""
+        print(f"Возникла ошибка при выполнении запроса: {err}")
+        return False, "Произошла ошибка при проверке доступности домена"
 
 
 def process_domain_purchase_confirmation(message, domain_name, domain_zone):
@@ -371,32 +332,102 @@ def process_domain_purchase_confirmation(message, domain_name, domain_zone):
 
 
 def purchase_domain(domain_name, domain_zone):
-    userid = "testapi"
-    password = "123456"
-    email = "test@nicenic.com"
+    import requests
 
-    current_time = datetime.utcnow()
-    vtime = current_time + timedelta(hours=8)
-    vtime_str = vtime.strftime('%Y%m%d%H%M') + 'GMT+08:00'
-    userstr = hashlib.md5((userid + password + email + vtime_str).encode()).hexdigest()
-
-    url = "http://apitest.nicenic.com/"
-    data = {
-        "userid": userid,
-        "userstr": userstr,
-        "category": "all",
-        "action": "activate",
-        "vtime": vtime,
-        "domain": domain_name + domain_zone,
-        "domainpwd": "123123",
-        "vyear": 2023
+    purchase_data = {
+        "consent": {
+            "agreedAt": "2023-09-04T12:00:00Z",
+            "agreedBy": "Your Name",
+            "agreementKeys": ["DNRA"]
+        },
+        "contactAdmin": {
+            "addressMailing": {
+                "address1": "123 Main St",
+                "city": "Your City",
+                "country": "US",
+                "postalCode": "12345",
+                "state": "CA"  # Код штата для Калифорнии
+            },
+            "email": "admin@example.com",
+            "fax": "+1.1234567890",
+            "jobTitle": "1",
+            "nameFirst": "Admin",
+            "nameLast": "LastName",
+            "nameMiddle": "1",
+            "organization": "Your Organization",
+            "phone": "+1.1234567890"
+        },
+        "contactBilling": {
+            "addressMailing": {
+                "address1": "123 Main St",
+                "city": "Your City",
+                "country": "US",
+                "postalCode": "12345",
+                "state": "CA"  # Код штата для Калифорнии
+            },
+            "email": "billing@example.com",
+            "fax": "+1.1234567890",
+            "jobTitle": "1",
+            "nameFirst": "Billing",
+            "nameLast": "LastName",
+            "nameMiddle": "",
+            "organization": "Your Organization",
+            "phone": "+1.1234567890"
+        },
+        "contactRegistrant": {
+            "addressMailing": {
+                "address1": "123 Main St",
+                "city": "Your City",
+                "country": "US",
+                "postalCode": "12345",
+                "state": "CA"  # Код штата для Калифорнии
+            },
+            "email": "registrant@example.com",
+            "fax": "+1.1234567890",
+            "jobTitle": "1",
+            "nameFirst": "Registrant",
+            "nameLast": "LastName",
+            "nameMiddle": "1",
+            "organization": "Your Organization",
+            "phone": "+1.1234567890"
+        },
+        "contactTech": {
+            "addressMailing": {
+                "address1": "123 Main St",
+                "city": "Your City",
+                "country": "US",
+                "postalCode": "12345",
+                "state": "CA"  # Код штата для Калифорнии
+            },
+            "email": "tech@example.com",
+            "fax": "+1.1234567890",
+            "jobTitle": "1",
+            "nameFirst": "Tech",
+            "nameLast": "LastName",
+            "nameMiddle": "",
+            "organization": "Your Organization",
+            "phone": "+1.1234567890"
+        },
+        "domain": "zxcursed1.com",
+        "nameServers": ["ns1.example.com", "ns2.example.com"],
+        "period": 1,
+        "privacy": False,
+        "renewAuto": True
     }
+
+    # Отправка POST-запроса
+    url = "https://api.ote-godaddy.com/v1/domains/purchase"
+    headers = {
+        "Authorization": "sso-key 3mM44UdBCbEmRF_Uac91bSRzG2f196iUCUVac:HN7VLrUFQ9YP1zvAFPjN7R",
+        "Content-Type": "application/json"
+    }
+
     try:
-        response = requests.get(url, data=data)
+        response = requests.post(url, headers=headers, json=purchase_data)
         print(response.text)
-        response.raise_for_status()  # проверка на ошибки при отправке запроса
+        response.raise_for_status()
     except requests.exceptions.RequestException as err:
-        print(f"Возникла ошибка при выполнении запроса: {err}")
+        print(f"Произошла ошибка при покупке домена: {err}")
 
 
 @bot.message_handler(func=lambda message: message.text == 'Купить хост')
@@ -482,7 +513,7 @@ def handle_buttons(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == 'add_domain')
 def handle_add_domain(call):
-   pass
+    pass
 
 
 bot.polling()
