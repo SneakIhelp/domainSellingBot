@@ -167,6 +167,8 @@ def payment_method_keyboard():
     keyboard = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     buttons = [telebot.types.KeyboardButton(method) for method in payment_methods]
     keyboard.add(*buttons)
+    back_button = telebot.types.KeyboardButton('Назад')
+    keyboard.add(back_button)
     return keyboard
 
 
@@ -174,8 +176,15 @@ def payment_method_keyboard():
 def process_payment_method(message):
     user_id = message.chat.id
     method = message.text
-    bot.send_message(user_id, "Введите сумму пополнения в $:")
-    bot.register_next_step_handler(message, lambda msg: process_replenish_balance(msg, method))
+    if method == 'Назад':
+        start(message)
+    else:
+        # Добавляем кнопку "Отмена" для отмены ввода
+        cancel_button = telebot.types.KeyboardButton('Отмена')
+        cancel_keyboard = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+        cancel_keyboard.add(cancel_button)
+        bot.send_message(user_id, "Введите сумму пополнения в $:", reply_markup=cancel_keyboard)
+        bot.register_next_step_handler(message, lambda msg: process_replenish_balance(msg, method))
 
 
 # Функция для обработки следующего шага после ввода суммы пополнения
@@ -183,35 +192,40 @@ def process_replenish_balance(message, method):
     user_id = message.chat.id
     amount = message.text
 
-    if method == "USDT TRC20":
-        method = "USDTCRYPTOBOT"
-    elif method == "BTC":
-        method = "BITCOIN"
-    elif method == "ETH":
-        method = "ETHEREUM"
+    if amount == 'Отмена':
+        start(message)  # Вернуться к основному меню при выборе "Отмена"
+    else:
+        if method == "USDT TRC20":
+            method = "USDTCRYPTOBOT"
+        elif method == "BTC":
+            method = "BITCOIN"
+        elif method == "ETH":
+            method = "ETHEREUM"
 
-    # Подключение к Crystal Pay API и отправка запроса на оплату
-    url = "https://api.crystalpay.io/v2/invoice/create/"
-    data = {
-        "auth_login": "domainsSecond2Bot",
-        "auth_secret": "77f06e463422308db2549add690388d2c4fcadc0",
-        "amount": amount,
-        "required_method": method,
-        "amount_currency": "USD",
-        "type": "purchase",
-        "lifetime": 60
-    }
-    response = requests.post(url, json=data)
-    data = json.loads(response.text)
-    url = data["url"]
+        # Подключение к Crystal Pay API и отправка запроса на оплату
+        url = "https://api.crystalpay.io/v2/invoice/create/"
+        data = {
+            "auth_login": "domainsSecond2Bot",
+            "auth_secret": "77f06e463422308db2549add690388d2c4fcadc0",
+            "amount": amount,
+            "required_method": method,
+            "amount_currency": "USD",
+            "type": "purchase",
+            "lifetime": 60
+        }
+        response = requests.post(url, json=data)
+        data = json.loads(response.text)
+        url = data["url"]
+        print(url)
 
-    update_balance(connection, user_id, amount)
-    update_profile_info(connection, user_id)
+        update_balance(connection, user_id, amount)
+        update_profile_info(connection, user_id)
 
-    # Обновление информации о профиле пользователя
-    update_profile_info(connection, user_id)
+        # Обновление информации о профиле пользователя
+        update_profile_info(connection, user_id)
 
-    bot.send_message(user_id, "Ваш баланс успешно пополнен.")
+        bot.send_message(user_id, "Ваш баланс успешно пополнен.")
+        start(message)
 
 
 # Обработчик команды "Профиль"
@@ -263,30 +277,30 @@ def buy_domains(message):
     domains_info = "Доступные доменные зоны и цены:\n"
     for zone, price in domain_zones.items():
         domains_info += f"{zone} - {price}$\n"
-    bot.send_message(user_id, domains_info)
 
-    # Запрос выбора доменной зоны
+    # Создаем клавиатуру с кнопкой "Назад"
     markup = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
     for zone in domain_zones.keys():
         markup.add(zone)
-    markup.add("Другая доменная зона")
+    markup.add("Другая доменная зона", "Назад")  # Добавляем кнопку "Назад"
+
+    bot.send_message(user_id, domains_info)
     bot.send_message(user_id, "Выберите доменную зону из списка или введите свою:", reply_markup=markup)
     bot.register_next_step_handler(message, process_domain_zone_selection)
-
-
-def get_domains_info():
-    domains_info = ".com - 23$\n.net - 25$\n.org - 23$"
-    return domains_info
 
 
 def process_domain_zone_selection(message):
     user_id = message.chat.id
     selected_zone = message.text
 
-    if selected_zone in domain_zones:
+    if selected_zone == "Назад":
+        start(message)
+    elif selected_zone in domain_zones:
         # Если выбрана доменная зона из списка
         bot.send_message(user_id, f"Вы выбрали доменную зону {selected_zone}.")
-        bot.send_message(user_id, "Введите доменное имя без доменной зоны:")
+        markup = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+        markup.add("Назад")
+        bot.send_message(user_id, "Введите доменное имя без доменной зоны:", reply_markup=markup)
         bot.register_next_step_handler(message, process_domain_purchase, selected_zone)
     elif selected_zone == "Другая доменная зона":
         # Если выбрана опция "Другая доменная зона"
@@ -301,8 +315,10 @@ def process_custom_domain_zone(message):
     user_id = message.chat.id
     custom_zone = message.text.strip()
 
+    if custom_zone == "Назад":
+        buy_domains(message)
     # Проверка на корректность формата зоны (должна начинаться с точки)
-    if custom_zone.startswith("."):
+    elif custom_zone.startswith("."):
         bot.send_message(user_id, f"Вы выбрали доменную зону {custom_zone}.")
         bot.send_message(user_id, "Введите доменное имя без доменной зоны:")
         bot.register_next_step_handler(message, process_domain_purchase, custom_zone)
@@ -314,9 +330,11 @@ def process_custom_domain_zone(message):
 def process_domain_purchase(message, selected_zone):
     user_id = message.chat.id
     domain_name = message.text
+    if domain_name == "Назад":
+        buy_domains(message)
 
     # Проверка доступности доменной зоны и предложение купить домен
-    if is_domain_available(selected_zone, domain_name):
+    elif is_domain_available(selected_zone, domain_name):
         confirmation_markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
         buy_button = telebot.types.KeyboardButton('Купить')
         cancel_button = telebot.types.KeyboardButton('Отмена')
