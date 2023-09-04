@@ -544,6 +544,7 @@ def process_purchase_confirmation(message):
 
 
 def purchase_func():
+
     pass
 
 
