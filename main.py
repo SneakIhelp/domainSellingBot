@@ -1,10 +1,5 @@
 import json
 import sqlite3
-import time
-import hashlib
-import http.client
-import urllib.parse
-from datetime import datetime, timedelta
 from sqlite3 import Error
 import telebot
 from telebot import types
@@ -30,7 +25,8 @@ def create_users_table(conn):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, balance REAL, purchases REAL, discount REAL)")
+            "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, balance REAL, purchases REAL, "
+            "discount REAL)")
         cursor.execute("CREATE TABLE IF NOT EXISTS purchases (user_id INTEGER, amount REAL)")
         conn.commit()
         print("Таблица 'users' успешно создана")
@@ -249,17 +245,32 @@ def calculate_discount(amount):
         return 0
 
 
+domain_zones = {
+    ".com": 23,
+    ".net": 25,
+    ".org": 23,
+    ".info": 20,  # Пример другой доменной зоны
+    ".biz": 18  # Пример другой доменной зоны
+}
+
+
 # Обработчик команды "Купить домены"
 @bot.message_handler(func=lambda message: message.text == 'Купить домены')
 def buy_domains(message):
     user_id = message.chat.id
 
-    # Получение информации о доступных доменных зонах и их ценах
-    domains_info = get_domains_info()
+    # Отправляем пользователю список доступных доменных зон и цен
+    domains_info = "Доступные доменные зоны и цены:\n"
+    for zone, price in domain_zones.items():
+        domains_info += f"{zone} - {price}$\n"
     bot.send_message(user_id, domains_info)
 
     # Запрос выбора доменной зоны
-    bot.send_message(user_id, "Выберите доменную зону:")
+    markup = telebot.types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    for zone in domain_zones.keys():
+        markup.add(zone)
+    markup.add("Другая доменная зона")
+    bot.send_message(user_id, "Выберите доменную зону из списка или введите свою:", reply_markup=markup)
     bot.register_next_step_handler(message, process_domain_zone_selection)
 
 
@@ -270,25 +281,49 @@ def get_domains_info():
 
 def process_domain_zone_selection(message):
     user_id = message.chat.id
-    domain_zone = message.text
+    selected_zone = message.text
 
-    # Получение введенного доменного имени от пользователя
-    bot.send_message(user_id, "Введите доменное имя без доменной зоны:")
-    bot.register_next_step_handler(message, process_domain_purchase, domain_zone)
+    if selected_zone in domain_zones:
+        # Если выбрана доменная зона из списка
+        bot.send_message(user_id, f"Вы выбрали доменную зону {selected_zone}.")
+        bot.send_message(user_id, "Введите доменное имя без доменной зоны:")
+        bot.register_next_step_handler(message, process_domain_purchase, selected_zone)
+    elif selected_zone == "Другая доменная зона":
+        # Если выбрана опция "Другая доменная зона"
+        bot.send_message(user_id, "Введите свою доменную зону (например, '.example'):")
+        bot.register_next_step_handler(message, process_custom_domain_zone)
+    else:
+        # Если введенная зона не найдена в списке
+        bot.send_message(user_id, "Доменная зона не найдена. Пожалуйста, выберите из списка или введите свою.")
 
 
-def process_domain_purchase(message, domain_zone):
+def process_custom_domain_zone(message):
+    user_id = message.chat.id
+    custom_zone = message.text.strip()
+
+    # Проверка на корректность формата зоны (должна начинаться с точки)
+    if custom_zone.startswith("."):
+        bot.send_message(user_id, f"Вы выбрали доменную зону {custom_zone}.")
+        bot.send_message(user_id, "Введите доменное имя без доменной зоны:")
+        bot.register_next_step_handler(message, process_domain_purchase, custom_zone)
+    else:
+        bot.send_message(user_id,
+                         "Некорректный формат доменной зоны. Пожалуйста, введите зону, начиная с точки (например, '.example').")
+
+
+def process_domain_purchase(message, selected_zone):
     user_id = message.chat.id
     domain_name = message.text
 
     # Проверка доступности доменной зоны и предложение купить домен
-    if is_domain_available(domain_zone, domain_name):
-        confirmation_keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
+    if is_domain_available(selected_zone, domain_name):
+        confirmation_markup = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
         buy_button = telebot.types.KeyboardButton('Купить')
         cancel_button = telebot.types.KeyboardButton('Отмена')
-        confirmation_keyboard.add(buy_button, cancel_button)
-        bot.send_message(user_id, "Домен доступен. Вы хотите его купить?", reply_markup=confirmation_keyboard)
-        bot.register_next_step_handler(message, process_domain_purchase_confirmation, domain_name, domain_zone)
+        back_button = telebot.types.KeyboardButton('Назад')
+        confirmation_markup.add(buy_button, cancel_button, back_button)
+        bot.send_message(user_id, "Домен доступен. Вы хотите его купить?", reply_markup=confirmation_markup)
+        bot.register_next_step_handler(message, process_domain_purchase_confirmation, domain_name, selected_zone)
     else:
         bot.send_message(user_id, "Это доменное имя недоступно. Пожалуйста, выберите другое доменное имя.")
 
@@ -319,21 +354,24 @@ def is_domain_available(domain_zone, domain_name):
         return False, "Произошла ошибка при проверке доступности домена"
 
 
-def process_domain_purchase_confirmation(message, domain_name, domain_zone):
+def process_domain_purchase_confirmation(message, domain_name, selected_zone):
     user_id = message.chat.id
     confirmation = message.text
 
     if confirmation == 'Купить':
-
-        purchase_domain(domain_name, domain_zone)
-        bot.send_message(user_id, "Домен успешно приобретен!")
-    else:
+        price = domain_zones[selected_zone]
+        purchase_domain(domain_name, selected_zone)
+        bot.send_message(user_id, f"Домен {domain_name}{selected_zone} успешно приобретен за {price}$!")
+    elif confirmation == 'Отмена':
         bot.send_message(user_id, "Покупка домена отменена.")
+    elif confirmation == 'Назад':
+        bot.send_message(user_id, "Выберите доменную зону:")
+        bot.register_next_step_handler(message, process_domain_zone_selection)
+    else:
+        bot.send_message(user_id, "Некорректный выбор. Используйте кнопки на клавиатуре.")
 
 
 def purchase_domain(domain_name, domain_zone):
-    import requests
-
     purchase_data = {
         "consent": {
             "agreedAt": "2023-09-04T12:00:00Z",
@@ -408,7 +446,7 @@ def purchase_domain(domain_name, domain_zone):
             "organization": "Your Organization",
             "phone": "+1.1234567890"
         },
-        "domain": "zxcursed1.com",
+        "domain": domain_name + domain_zone,
         "nameServers": ["ns1.example.com", "ns2.example.com"],
         "period": 1,
         "privacy": False,
